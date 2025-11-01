@@ -2,6 +2,17 @@
 # BUILD & SETUP INSTRUCTIONS
 # ============================================================================
 
+## 📋 Qt 6.9.3 MinGW CMD Commands:
+D:
+cd D:\Ani\Projects\SCERSE - C Syntax Guardian
+rmdir /s /q build
+mkdir build 
+cd build 
+cmake -G "MinGW Makefiles" ..
+mingw32-make
+SCERSE.exe
+
+
 ## FILES PROVIDED:
 
 1. **MainWindow.hpp** - Main window header (namespaced SCERSE)

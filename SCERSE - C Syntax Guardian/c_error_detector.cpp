@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <cctype>
 #include <sstream>
+#include <set>
 
 using namespace std;
 
@@ -585,7 +586,79 @@ public:
 
 struct VarInfo {
     string name, type;
-    VarInfo(string n = "", string t = "") : name(n), type(t) {}
+    int line, column;  // Track where variable was declared
+    VarInfo(string n = "", string t = "", int l = 0, int c = 0) 
+        : name(n), type(t), line(l), column(c) {}
+};
+
+class TypeSystem {
+public:
+    // Check if two types are compatible
+    static bool areTypesCompatible(const string& lhs, const string& rhs) {
+        // Exact match
+        if (lhs == rhs) return true;
+        
+        // Numeric types can be mixed (int, float, double)
+        set<string> numericTypes = {"int", "float", "double", "char"};
+        if (numericTypes.count(lhs) && numericTypes.count(rhs)) return true;
+        
+        // Pointer types (simplified)
+        if (lhs.find("*") != string::npos && rhs.find("*") != string::npos) return true;
+        if (lhs == "void*" && rhs.find("*") != string::npos) return true;
+        
+        return false;
+    }
+    
+    // Get type of binary operation result
+    static string getOperationResultType(const string& lhs, const string& rhs, const string& op) {
+        set<string> numericTypes = {"int", "float", "double", "char"};
+        
+        // Arithmetic operations
+        if (op == "+" || op == "-" || op == "*" || op == "/") {
+            if (numericTypes.count(lhs) && numericTypes.count(rhs)) {
+                // If either is float/double, result is float/double
+                if (lhs == "float" || rhs == "float") return "float";
+                if (lhs == "double" || rhs == "double") return "double";
+                return "int";
+            }
+            // String concatenation with +
+            if ((lhs == "string" || lhs.find("*char") != string::npos) && op == "+") {
+                return "string";
+            }
+            return "INVALID";  // Type error
+        }
+        
+        // Comparison operations return int (bool)
+        if (op == "==" || op == "!=" || op == "<" || op == ">" || 
+            op == "<=" || op == ">=") {
+            if (areTypesCompatible(lhs, rhs)) return "int";
+            return "INVALID";
+        }
+        
+        // Logical operations
+        if (op == "&&" || op == "||") {
+            return "int";
+        }
+        
+        // Bitwise operations
+        if (op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>") {
+            if (numericTypes.count(lhs) && numericTypes.count(rhs)) {
+                return "int";
+            }
+            return "INVALID";
+        }
+        
+        return "UNKNOWN";
+    }
+    
+    static bool isNumericType(const string& type) {
+        set<string> numeric = {"int", "float", "double", "char"};
+        return numeric.count(type) > 0;
+    }
+    
+    static bool isPointerType(const string& type) {
+        return type.find("*") != string::npos;
+    }
 };
 
 class SymbolTable {
@@ -597,29 +670,38 @@ public:
     void pushScope() { scopes.push_back({}); }
     void popScope() { if (!scopes.empty()) scopes.pop_back(); }
     
-    bool declare(const string& n, const string& t) {
+    bool declare(const string& n, const string& t, int line = 0, int col = 0) {
         auto& c = scopes.back();
         if (c.count(n)) return false;
-        c[n] = VarInfo(n, t);
+        c[n] = VarInfo(n, t, line, col);
         return true;
+    }
+    
+    // Get the type of a variable
+    string getType(const string& n) const {
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            if (it->count(n)) return it->at(n).type;
+        }
+        // Check if it's a standard library function
+        if (stdLib.isStdioFunction(n)) return "function";
+        if (stdLib.isStdlibFunction(n)) return "function";
+        if (stdLib.isStringFunction(n)) return "function";
+        if (stdLib.isMathFunction(n)) return "function";
+        return "UNKNOWN";
     }
     
     bool exists(const string& n) const {
-    // CHECK STANDARD LIBRARY FIRST
-    if (stdLib.isStdioFunction(n) || 
-        stdLib.isStdlibFunction(n) || 
-        stdLib.isStringFunction(n) || 
-        stdLib.isMathFunction(n)) {
-        return true;
+        if (stdLib.isStdioFunction(n) || 
+            stdLib.isStdlibFunction(n) || 
+            stdLib.isStringFunction(n) || 
+            stdLib.isMathFunction(n)) {
+            return true;
+        }
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            if (it->count(n)) return true;
+        }
+        return false;
     }
-    
-    // Then check user variables
-    for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-        if (it->count(n)) return true;
-    }
-    return false;
-}
-
 };
 
 // ============================================================================
@@ -635,6 +717,7 @@ private:
     SuggestionEngine suggestionEngine;
     StandardLibrary stdLib;
     size_t lastIndex;
+    TypeSystem typeChecker;
 
     Token curr() const { return index < tokens.size() ? tokens[index] : Token(TokenType::TOK_EOF, ""); }
     Token peek(int offset = 1) const { return index + offset < tokens.size() ? tokens[index + offset] : Token(TokenType::TOK_EOF, ""); }
@@ -681,6 +764,84 @@ private:
                isComparisonOp(t) || t.type == TokenType::OP_ASSIGN;
     }
 
+    // Helper: Get expression type and detect type errors
+    string getExpressionType(const Token& t) {
+        if (t.type == TokenType::TOK_NUMBER) return "int";  // Could be float if has .
+        if (t.type == TokenType::TOK_STRING) return "string";
+        if (t.type == TokenType::TOK_CHAR) return "char";
+        if (t.type == TokenType::TOK_IDENTIFIER) return sym.getType(t.value);
+        return "UNKNOWN";
+    }
+
+    string parseExpressionWithType() {
+        string type = parsePrimaryWithType();
+        while (isOp(curr())) {
+            Token op = curr();
+            advance();
+            string rhsType = parsePrimaryWithType();
+            
+            // Check type compatibility
+            if (type != "UNKNOWN" && rhsType != "UNKNOWN") {
+                string resultType = TypeSystem::getOperationResultType(type, rhsType, op.value);
+                
+                if (resultType == "INVALID") {
+                    string errMsg = "Line " + to_string(op.line) + ":" + to_string(op.column) +
+                                  " - Type error: cannot apply '" + op.value + "' to '" + type + 
+                                  "' and '" + rhsType + "'";
+                    string sug = "SUGGESTION: Ensure both operands are compatible types";
+                    errors.push_back({errMsg, sug});
+                }
+                type = (resultType == "INVALID" || resultType == "UNKNOWN") ? type : resultType;
+            }
+        }
+        return type;
+    }
+    
+    string parsePrimaryWithType() {
+        if (curr().type == TokenType::TOK_IDENTIFIER) {
+            Token id = curr();
+            string type = sym.getType(id.value);
+            advance();
+            
+            if (curr().type == TokenType::LPAREN) {
+                // Function call - return function return type (assume int for now)
+                advance();
+                if (curr().type != TokenType::RPAREN) {
+                    while (true) {
+                        parseExpressionWithType();
+                        if (curr().type == TokenType::COMMA) {
+                            advance();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                expect(TokenType::RPAREN, ")");
+                return "int";  // Assume functions return int
+            }
+            return type;
+        }
+        else if (curr().type == TokenType::TOK_NUMBER) {
+            advance();
+            return "int";  // Could detect float by checking for decimal
+        }
+        else if (curr().type == TokenType::TOK_STRING) {
+            advance();
+            return "string";
+        }
+        else if (curr().type == TokenType::TOK_CHAR) {
+            advance();
+            return "char";
+        }
+        else if (curr().type == TokenType::LPAREN) {
+            advance();
+            string type = parseExpressionWithType();
+            expect(TokenType::RPAREN, ")");
+            return type;
+        }
+        return "UNKNOWN";
+    }
+
     void parseDeclOrFunc() {
         string typeName = curr().value;
         advance();
@@ -700,27 +861,57 @@ private:
     }
 
     void parseVarDecl(const string& type, const string& ident, const Token& nameTok) {
-        if (!sym.declare(ident, type)) {
-            string errMsg = "Line " + to_string(nameTok.line) + ":" + to_string(nameTok.column) + " - Redeclaration of '" + ident + "'";
-            string sug = suggestionEngine.getSuggestion(errMsg);
+    if (!sym.declare(ident, type, nameTok.line, nameTok.column)) {
+        string errMsg = "Line " + to_string(nameTok.line) + ":" + to_string(nameTok.column) + 
+                       " - Redeclaration of '" + ident + "'";
+        string sug = suggestionEngine.getSuggestion(errMsg);
+        errors.push_back({errMsg, sug});
+    }
+    
+    if (curr().type == TokenType::OP_ASSIGN) { 
+        Token assignTok = curr();
+        advance(); 
+        
+        // Parse RHS and check type compatibility
+        string rhsType = parseExpressionWithType();
+        
+        // Type checking: assignment
+        if (rhsType != "UNKNOWN" && !TypeSystem::areTypesCompatible(type, rhsType)) {
+            string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
+                           " - Type mismatch in assignment: cannot assign '" + rhsType + 
+                           "' to '" + type + "'";
+            string sug = "SUGGESTION: Ensure assignment types match. " + type + " expected, " + rhsType + " given";
             errors.push_back({errMsg, sug});
         }
-        if (curr().type == TokenType::OP_ASSIGN) { advance(); parseExpression(); }
-        while (curr().type == TokenType::COMMA) {
+    }
+    
+    while (curr().type == TokenType::COMMA) {
+        advance();
+        if (curr().type == TokenType::TOK_IDENTIFIER) {
+            Token t = curr();
+            if (!sym.declare(t.value, type, t.line, t.column)) {
+                string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                               " - Redeclaration";
+                string sug = suggestionEngine.getSuggestion(errMsg);
+                errors.push_back({errMsg, sug});
+            }
             advance();
-            if (curr().type == TokenType::TOK_IDENTIFIER) {
-                Token t = curr();
-                if (!sym.declare(t.value, type)) {
-                    string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + " - Redeclaration";
-                    string sug = suggestionEngine.getSuggestion(errMsg);
+            if (curr().type == TokenType::OP_ASSIGN) { 
+                Token assignTok = curr();
+                advance(); 
+                string rhsType = parseExpressionWithType();
+                
+                if (rhsType != "UNKNOWN" && !TypeSystem::areTypesCompatible(type, rhsType)) {
+                    string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
+                                   " - Type mismatch: cannot assign '" + rhsType + "' to '" + type + "'";
+                    string sug = "SUGGESTION: Ensure types are compatible";
                     errors.push_back({errMsg, sug});
                 }
-                advance();
-                if (curr().type == TokenType::OP_ASSIGN) { advance(); parseExpression(); }
             }
         }
-        expect(TokenType::SEMICOLON, ";");
     }
+    expect(TokenType::SEMICOLON, ";");
+}
 
    void parseFunction(const std::string& type, const std::string& ident, const Token& /*nameTok*/) {
     // Function body without using nameTok
@@ -795,16 +986,36 @@ private:
     }
 
     void parseExprOrAssignment() {
-        if (curr().type == TokenType::TOK_IDENTIFIER && peek().type == TokenType::OP_ASSIGN) {
-            Token id = curr();
-            if (!sym.exists(id.value)) {
-                string errMsg = "Line " + to_string(id.line) + ":" + to_string(id.column) + " - Undeclared variable '" + id.value + "'";
-                string sug = suggestionEngine.getSuggestion(errMsg);
-                errors.push_back({errMsg, sug});
-            }
-            advance(); advance(); parseExpression();
-        } else { parseExpression(); }
+    if (curr().type == TokenType::TOK_IDENTIFIER && peek().type == TokenType::OP_ASSIGN) {
+        Token id = curr();
+        string varType = sym.getType(id.value);
+        
+        if (!sym.exists(id.value)) {
+            string errMsg = "Line " + to_string(id.line) + ":" + to_string(id.column) + 
+                           " - Undeclared variable '" + id.value + "'";
+            string sug = suggestionEngine.getSuggestion(errMsg);
+            errors.push_back({errMsg, sug});
+        }
+        
+        advance();
+        Token assignTok = curr();
+        advance();
+        
+        string rhsType = parseExpressionWithType();
+        
+        // Type checking: assignment to existing variable
+        if (varType != "UNKNOWN" && rhsType != "UNKNOWN" && 
+            !TypeSystem::areTypesCompatible(varType, rhsType)) {
+            string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
+                           " - Type error: assigning '" + rhsType + "' to '" + varType + "'";
+            string sug = "SUGGESTION: Types must be compatible. " + varType + " expected, " + 
+                        rhsType + " provided";
+            errors.push_back({errMsg, sug});
+        }
+    } else { 
+        parseExpressionWithType(); 
     }
+}
 
     void parseExpression() {
         parsePrimary();

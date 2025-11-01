@@ -1,0 +1,28 @@
+
+# Consider dependencies only in project.
+set(CMAKE_DEPENDS_IN_PROJECT_ONLY OFF)
+
+# The set of languages for which implicit dependencies are needed:
+set(CMAKE_DEPENDS_LANGUAGES
+  )
+
+# The set of dependency files which are needed:
+set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "" "SCERSE_autogen/timestamp" "custom" "SCERSE_autogen/deps"
+  "D:/Ani/Projects/scerse_gcc/CodeEditor.cpp" "CMakeFiles/SCERSE.dir/CodeEditor.cpp.obj" "gcc" "CMakeFiles/SCERSE.dir/CodeEditor.cpp.obj.d"
+  "D:/Ani/Projects/scerse_gcc/MainWindow.cpp" "CMakeFiles/SCERSE.dir/MainWindow.cpp.obj" "gcc" "CMakeFiles/SCERSE.dir/MainWindow.cpp.obj.d"
+  "D:/Ani/Projects/scerse_gcc/SCERSE_autogen/mocs_compilation.cpp" "CMakeFiles/SCERSE.dir/SCERSE_autogen/mocs_compilation.cpp.obj" "gcc" "CMakeFiles/SCERSE.dir/SCERSE_autogen/mocs_compilation.cpp.obj.d"
+  "D:/Ani/Projects/scerse_gcc/SyntaxHighlighter.cpp" "CMakeFiles/SCERSE.dir/SyntaxHighlighter.cpp.obj" "gcc" "CMakeFiles/SCERSE.dir/SyntaxHighlighter.cpp.obj.d"
+  "D:/Ani/Projects/scerse_gcc/main.cpp" "CMakeFiles/SCERSE.dir/main.cpp.obj" "gcc" "CMakeFiles/SCERSE.dir/main.cpp.obj.d"
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_LINKED_INFO_FILES
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_FORWARD_LINKED_INFO_FILES
+  )
+
+# Fortran module output directory.
+set(CMAKE_Fortran_TARGET_MODULE_DIR "")

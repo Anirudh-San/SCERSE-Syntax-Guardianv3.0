@@ -1,0 +1,5 @@
+D:/Ani/Projects/scerse_gcc/CMakeFiles/SCERSE.dir
+D:/Ani/Projects/scerse_gcc/CMakeFiles/edit_cache.dir
+D:/Ani/Projects/scerse_gcc/CMakeFiles/rebuild_cache.dir
+D:/Ani/Projects/scerse_gcc/CMakeFiles/SCERSE_autogen_timestamp_deps.dir
+D:/Ani/Projects/scerse_gcc/CMakeFiles/SCERSE_autogen.dir

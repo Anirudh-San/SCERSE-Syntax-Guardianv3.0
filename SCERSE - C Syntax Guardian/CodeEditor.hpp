@@ -1,0 +1,61 @@
+// ============================================================================
+// FILE 3: CodeEditor.hpp
+// ============================================================================
+
+#pragma once
+
+#include <QPlainTextEdit>
+
+QT_BEGIN_NAMESPACE
+class QPaintEvent;
+class QResizeEvent;
+QT_END_NAMESPACE
+
+namespace SCERSE {
+    
+class SyntaxHighlighter;
+class LineNumberArea;
+
+class CodeEditor : public QPlainTextEdit {
+    Q_OBJECT
+
+public:
+    explicit CodeEditor(QWidget *parent = nullptr);
+    
+    void lineNumberAreaPaintEvent(QPaintEvent *event);
+    int lineNumberAreaWidth();
+    
+    int getCurrentLine() const;
+    int getCurrentColumn() const;
+    
+    void highlightErrorLine(int lineNumber);
+    void clearErrorHighlighting();
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
+private slots:
+    void updateLineNumberAreaWidth(int newBlockCount);
+    void highlightCurrentLine();
+    void updateLineNumberArea(const QRect &rect, int dy);
+
+private:
+    QWidget *lineNumberArea;
+    SyntaxHighlighter *syntaxHighlighter;
+};
+
+class LineNumberArea : public QWidget {
+public:
+    explicit LineNumberArea(CodeEditor *editor)
+        : QWidget(editor), codeEditor(editor) {}
+    
+    QSize sizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    CodeEditor *codeEditor;
+};
+
+} // namespace SCERSE

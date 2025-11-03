@@ -11,7 +11,6 @@ using namespace SCERSE;
 int main(int argc, char *argv[])
 {
     qDebug() << "=== Starting SCERSE Application ===";
-    
     QApplication app(argc, argv);
     
     MainWindow window;

@@ -171,9 +171,10 @@ void MainWindow::createMenus()
             "SCERSE - C Syntax Guardian v3.0\n\n"
             "Real-time error detection and syntax highlighting for C code.\n\n"
             "Built with Qt 6.9.3\n"
-
-            "\nBy - Anirudh Sanker"
-            "2023UCP1844\n\n"
+            "-----------------------\n"
+            "By - Anirudh Sanker\n"
+            "2023UCP1844\n"
+            "-----------------------\n\n"
             
             "©2025");
     });

@@ -29,9 +29,32 @@ CodeEditor::CodeEditor(QWidget *parent)
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
     
+    // Font settings
     setFont(QFont("Courier New", 11));
     setTabStopDistance(40);
     
+    // ===== DARK MODE FIX: Set proper colors =====
+    
+    // Set stylesheet for dark theme compatibility
+    setStyleSheet(
+        "QPlainTextEdit {"
+        "   background-color: #1e1e1e;"    // Dark background
+        "   color: #d4d4d4;"                 // Light gray text
+        "   selection-background-color: #264f78;"  // Blue selection
+        "   selection-color: #ffffff;"       // White selected text
+        "}"
+    );
+    
+    /* 
+    // Alternative: Use QPalette for more control
+    QPalette p = palette();
+    p.setColor(QPalette::Base, QColor(30, 30, 30));           // Background: dark gray
+    p.setColor(QPalette::Text, QColor(212, 212, 212));        // Text: light gray
+    p.setColor(QPalette::Highlight, QColor(38, 79, 120));     // Selection background
+    p.setColor(QPalette::HighlightedText, QColor(255, 255, 255)); // Selected text
+    setPalette(p);
+    */
+
     qDebug() << "CodeEditor initialized";
 }
 
@@ -59,7 +82,10 @@ void CodeEditor::highlightCurrentLine() {
     QList<QTextEdit::ExtraSelection> extraSelections;
     if (!isReadOnly()) {
         QTextEdit::ExtraSelection selection;
-        QColor lineColor = QColor(232, 242, 254);
+        
+        // DARK MODE: Use darker highlight for current line
+        QColor lineColor = QColor(44, 44, 44);  // Dark gray (was 232, 242, 254)
+        
         selection.format.setBackground(lineColor);
         selection.format.setProperty(QTextFormat::FullWidthSelection, true);
         selection.cursor = textCursor();
@@ -67,6 +93,7 @@ void CodeEditor::highlightCurrentLine() {
         extraSelections.append(selection);
     }
     setExtraSelections(extraSelections);
+    
     // Restore cursor state
     setTextCursor(oldCursor);
 }
@@ -89,7 +116,9 @@ void CodeEditor::updateLineNumberArea(const QRect &rect, int dy)
 void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event)
 {
     QPainter painter(lineNumberArea);
-    painter.fillRect(event->rect(), QColor(240, 240, 240));
+    
+    // DARK MODE: Dark background for line numbers
+    painter.fillRect(event->rect(), QColor(37, 37, 37));  // Dark gray (was 240, 240, 240)
     
     QTextBlock block = firstVisibleBlock();
     int blockNumber = block.blockNumber();
@@ -99,7 +128,10 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event)
     while (block.isValid() && top <= event->rect().bottom()) {
         if (block.isVisible() && bottom >= event->rect().top()) {
             QString number = QString::number(blockNumber + 1);
-            painter.setPen(Qt::gray);
+            
+            // DARK MODE: Light gray text for line numbers
+            painter.setPen(QColor(128, 128, 128));  // Gray (was Qt::gray)
+            
             painter.drawText(0, top, lineNumberArea->width() - 4,
                            fontMetrics().height(),
                            Qt::AlignRight, number);
@@ -120,19 +152,19 @@ void CodeEditor::highlightErrorLine(int lineNumber)
     
     QList<QTextEdit::ExtraSelection> extraSelections;
     
-    // Keep current line highlight
+    // Keep current line highlight (DARK MODE color)
     QTextEdit::ExtraSelection selection;
-    QColor lineColor = QColor(230, 240, 250);
+    QColor lineColor = QColor(44, 44, 44);  // Dark gray
     selection.format.setBackground(lineColor);
     selection.format.setProperty(QTextFormat::FullWidthSelection, true);
     selection.cursor = textCursor();
     selection.cursor.clearSelection();
     extraSelections.append(selection);
     
-    // Add error highlight
+    // Add error highlight (DARK MODE: lighter red)
     QTextEdit::ExtraSelection errorSelection;
     errorSelection.cursor = cursor;
-    errorSelection.format.setBackground(QBrush(QColor(255, 200, 200)));
+    errorSelection.format.setBackground(QBrush(QColor(100, 30, 30))); // Dark red (was 255, 200, 200)
     errorSelection.format.setProperty(QTextFormat::FullWidthSelection, true);
     extraSelections.append(errorSelection);
     

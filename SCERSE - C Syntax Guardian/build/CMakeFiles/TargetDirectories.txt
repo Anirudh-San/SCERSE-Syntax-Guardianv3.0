@@ -1,0 +1,5 @@
+D:/Ani/Projects/SCERSE - C Syntax Guardian/build/CMakeFiles/SCERSE.dir
+D:/Ani/Projects/SCERSE - C Syntax Guardian/build/CMakeFiles/edit_cache.dir
+D:/Ani/Projects/SCERSE - C Syntax Guardian/build/CMakeFiles/rebuild_cache.dir
+D:/Ani/Projects/SCERSE - C Syntax Guardian/build/CMakeFiles/SCERSE_autogen_timestamp_deps.dir
+D:/Ani/Projects/SCERSE - C Syntax Guardian/build/CMakeFiles/SCERSE_autogen.dir

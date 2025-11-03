@@ -764,6 +764,23 @@ private:
                isComparisonOp(t) || t.type == TokenType::OP_ASSIGN;
     }
 
+    bool isValidUnaryOp(TokenType type) {
+    return type == TokenType::OP_MINUS || type == TokenType::OP_PLUS ||
+           type == TokenType::OP_NOT || type == TokenType::OP_BITNOT ||
+           type == TokenType::OP_INC || type == TokenType::OP_DEC;
+}
+
+    bool isValidBinaryOp(TokenType type) {
+    return type == TokenType::OP_PLUS || type == TokenType::OP_MINUS ||
+           type == TokenType::OP_STAR || type == TokenType::OP_SLASH ||
+           type == TokenType::OP_PERCENT || type == TokenType::OP_ASSIGN ||
+           type == TokenType::OP_EQ || type == TokenType::OP_NE ||
+           type == TokenType::OP_LT || type == TokenType::OP_GT ||
+           type == TokenType::OP_LE || type == TokenType::OP_GE ||
+           type == TokenType::OP_AND || type == TokenType::OP_OR ||
+           type == TokenType::OP_BITAND || type == TokenType::OP_BITOR ||
+           type == TokenType::OP_BITXOR;
+}
     // Helper: Get expression type and detect type errors
     string getExpressionType(const Token& t) {
         if (t.type == TokenType::TOK_NUMBER) return "int";  // Could be float if has .
@@ -796,51 +813,6 @@ private:
         }
         return type;
     }
-    
-    string parsePrimaryWithType() {
-        if (curr().type == TokenType::TOK_IDENTIFIER) {
-            Token id = curr();
-            string type = sym.getType(id.value);
-            advance();
-            
-            if (curr().type == TokenType::LPAREN) {
-                // Function call - return function return type (assume int for now)
-                advance();
-                if (curr().type != TokenType::RPAREN) {
-                    while (true) {
-                        parseExpressionWithType();
-                        if (curr().type == TokenType::COMMA) {
-                            advance();
-                        } else {
-                            break;
-                        }
-                    }
-                }
-                expect(TokenType::RPAREN, ")");
-                return "int";  // Assume functions return int
-            }
-            return type;
-        }
-        else if (curr().type == TokenType::TOK_NUMBER) {
-            advance();
-            return "int";  // Could detect float by checking for decimal
-        }
-        else if (curr().type == TokenType::TOK_STRING) {
-            advance();
-            return "string";
-        }
-        else if (curr().type == TokenType::TOK_CHAR) {
-            advance();
-            return "char";
-        }
-        else if (curr().type == TokenType::LPAREN) {
-            advance();
-            string type = parseExpressionWithType();
-            expect(TokenType::RPAREN, ")");
-            return type;
-        }
-        return "UNKNOWN";
-    }
 
     void parseDeclOrFunc() {
         string typeName = curr().value;
@@ -868,19 +840,19 @@ private:
         errors.push_back({errMsg, sug});
     }
     
-    if (curr().type == TokenType::OP_ASSIGN) { 
+    if (curr().type == TokenType::OP_ASSIGN) {
         Token assignTok = curr();
-        advance(); 
+        advance();
         
-        // Parse RHS and check type compatibility
-        string rhsType = parseExpressionWithType();
+        // Get RHS type - this will check for undeclared vars AND incomplete expressions
+        string rhsType = parseExpression();
         
-        // Type checking: assignment
+        // TYPE MISMATCH CHECK: "int y = 12.3;" should warn
         if (rhsType != "UNKNOWN" && !TypeSystem::areTypesCompatible(type, rhsType)) {
             string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
-                           " - Type mismatch in assignment: cannot assign '" + rhsType + 
-                           "' to '" + type + "'";
-            string sug = "SUGGESTION: Ensure assignment types match. " + type + " expected, " + rhsType + " given";
+                           " - Type mismatch: assigning '" + rhsType + "' to '" + type + "'";
+            string sug = "SUGGESTION: Types don't match. " + type + " expected, " + 
+                        rhsType + " provided";
             errors.push_back({errMsg, sug});
         }
     }
@@ -896,15 +868,15 @@ private:
                 errors.push_back({errMsg, sug});
             }
             advance();
-            if (curr().type == TokenType::OP_ASSIGN) { 
+            if (curr().type == TokenType::OP_ASSIGN) {
                 Token assignTok = curr();
-                advance(); 
-                string rhsType = parseExpressionWithType();
+                advance();
+                string rhsType = parseExpression();
                 
                 if (rhsType != "UNKNOWN" && !TypeSystem::areTypesCompatible(type, rhsType)) {
                     string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
-                                   " - Type mismatch: cannot assign '" + rhsType + "' to '" + type + "'";
-                    string sug = "SUGGESTION: Ensure types are compatible";
+                                   " - Type mismatch: assigning '" + rhsType + "' to '" + type + "'";
+                    string sug = "SUGGESTION: Types don't match";
                     errors.push_back({errMsg, sug});
                 }
             }
@@ -912,6 +884,7 @@ private:
     }
     expect(TokenType::SEMICOLON, ";");
 }
+
 
    void parseFunction(const std::string& type, const std::string& ident, const Token& /*nameTok*/) {
     // Function body without using nameTok
@@ -965,27 +938,115 @@ private:
     }
 
     void parseStatement() {
-        if (curr().type == TokenType::PREPROCESSOR) { advance(); }
-        else if (curr().type == TokenType::LBRACE) { advance(); sym.pushScope(); parseBlock(); sym.popScope(); }
-        else if (curr().type == TokenType::KW_IF) {
-            advance(); expect(TokenType::LPAREN, "("); parseExpression(); expect(TokenType::RPAREN, ")");
-            parseStatement();
-            if (curr().type == TokenType::KW_ELSE) { advance(); parseStatement(); }
-        }
-        else if (curr().type == TokenType::KW_WHILE || curr().type == TokenType::KW_FOR) {
-            advance(); expect(TokenType::LPAREN, "("); parseExpression(); expect(TokenType::RPAREN, ")");
-            parseStatement();
-        }
-        else if (curr().type == TokenType::KW_RETURN) {
-            advance();
-            if (curr().type != TokenType::SEMICOLON) parseExpression();
-            expect(TokenType::SEMICOLON, ";");
-        }
-        else if (curr().type == TokenType::SEMICOLON) { advance(); }
-        else { parseExprOrAssignment(); expect(TokenType::SEMICOLON, ";"); }
+    Token t = curr();
+    
+    if (t.type == TokenType::PREPROCESSOR) {
+        advance();
     }
+    else if (t.type == TokenType::LBRACE) {
+        advance();
+        sym.pushScope();
+        parseBlock();
+        sym.popScope();
+    }
+    else if (t.type == TokenType::KW_IF) {
+        Token ifTok = curr();
+        advance();
+        expect(TokenType::LPAREN, "(");
+        parseExpression();
+        expect(TokenType::RPAREN, ")");
+        
+        if (curr().type == TokenType::SEMICOLON) {
+            string errMsg = "Line " + to_string(ifTok.line) + ":" + to_string(ifTok.column) + 
+                           " - Missing statement after 'if' condition";
+            string sug = "SUGGESTION: Add a statement or block after if";
+            errors.push_back({errMsg, sug});
+            advance();
+        } else if (curr().type == TokenType::RBRACE || curr().type == TokenType::TOK_EOF) {
+            string errMsg = "Line " + to_string(ifTok.line) + ":" + to_string(ifTok.column) + 
+                           " - Missing statement after 'if' condition";
+            string sug = "SUGGESTION: Add a statement or block after if";
+            errors.push_back({errMsg, sug});
+        } else {
+            parseStatement();
+        }
+        
+        if (curr().type == TokenType::KW_ELSE) {
+            advance();
+            parseStatement();
+        }
+    }
+    else if (t.type == TokenType::KW_WHILE || t.type == TokenType::KW_FOR) {
+        Token loopTok = curr();
+        advance();
+        expect(TokenType::LPAREN, "(");
+        parseExpression();
+        expect(TokenType::RPAREN, ")");
+        
+        if (curr().type == TokenType::SEMICOLON) {
+            string errMsg = "Line " + to_string(loopTok.line) + ":" + to_string(loopTok.column) + 
+                           " - Missing statement after loop condition";
+            string sug = "SUGGESTION: Add a statement or block";
+            errors.push_back({errMsg, sug});
+            advance();
+        } else {
+            parseStatement();
+        }
+    }
+    else if (t.type == TokenType::KW_RETURN) {
+        advance();
+        if (curr().type != TokenType::SEMICOLON) parseExpression();
+        expect(TokenType::SEMICOLON, ";");
+    }
+    else if (t.type == TokenType::SEMICOLON) {
+        advance();
+    }
+    else if (t.type == TokenType::TOK_NUMBER) {
+        string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                       " - Unexpected statement: bare number '" + t.value + "'";
+        string sug = "SUGGESTION: Remove or assign to a variable";
+        errors.push_back({errMsg, sug});
+        advance();
+        expect(TokenType::SEMICOLON, ";");
+    }
+    // BINARY OPERATORS only (NOT ++, --, which are unary prefix)
+    else if (t.type == TokenType::OP_EQ || t.type == TokenType::OP_NE ||
+             t.type == TokenType::OP_LT || t.type == TokenType::OP_GT ||
+             t.type == TokenType::OP_LE || t.type == TokenType::OP_GE ||
+             t.type == TokenType::OP_AND || t.type == TokenType::OP_OR ||
+             t.type == TokenType::OP_BITAND || t.type == TokenType::OP_BITOR ||
+             t.type == TokenType::OP_BITXOR || t.type == TokenType::OP_STAR ||
+             t.type == TokenType::OP_SLASH || t.type == TokenType::OP_PERCENT ||
+             t.type == TokenType::OP_ASSIGN) {
+        
+        string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                       " - Invalid statement: binary operator '" + t.value + 
+                       "' cannot start an expression (missing left operand)";
+        string sug = "SUGGESTION: Add a left operand. Example: x " + t.value + " y";
+        errors.push_back({errMsg, sug});
+        
+        // Skip until semicolon
+        while (curr().type != TokenType::SEMICOLON && curr().type != TokenType::TOK_EOF) {
+            advance();
+        }
+        if (curr().type == TokenType::SEMICOLON) advance();
+    }
+    // Valid unary operators (++, --, -, +, !, ~) that CAN start expressions
+    else if (t.type == TokenType::OP_MINUS || t.type == TokenType::OP_PLUS ||
+             t.type == TokenType::OP_NOT || t.type == TokenType::OP_BITNOT ||
+             t.type == TokenType::OP_INC || t.type == TokenType::OP_DEC) {
+        // These are UNARY operators - valid at statement start
+        parseExprOrAssignment();
+        expect(TokenType::SEMICOLON, ";");
+    }
+    else {
+        parseExprOrAssignment();
+        expect(TokenType::SEMICOLON, ";");
+    }
+}
 
-    void parseExprOrAssignment() {
+    
+void parseExprOrAssignment() {
     if (curr().type == TokenType::TOK_IDENTIFIER && peek().type == TokenType::OP_ASSIGN) {
         Token id = curr();
         string varType = sym.getType(id.value);
@@ -1001,45 +1062,84 @@ private:
         Token assignTok = curr();
         advance();
         
-        string rhsType = parseExpressionWithType();
+        string rhsType = parseExpression();
         
-        // Type checking: assignment to existing variable
-        if (varType != "UNKNOWN" && rhsType != "UNKNOWN" && 
+        // TYPE CHECK on assignment to existing variable
+        if (varType != "UNKNOWN" && rhsType != "UNKNOWN" &&
             !TypeSystem::areTypesCompatible(varType, rhsType)) {
             string errMsg = "Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) + 
                            " - Type error: assigning '" + rhsType + "' to '" + varType + "'";
-            string sug = "SUGGESTION: Types must be compatible. " + varType + " expected, " + 
+            string sug = "SUGGESTION: Types must match. " + varType + " expected, " + 
                         rhsType + " provided";
             errors.push_back({errMsg, sug});
         }
-    } else { 
-        parseExpressionWithType(); 
+    } else {
+        parseExpression();
     }
 }
 
-    void parseExpression() {
-        parsePrimary();
-        while (isOp(curr())) { advance(); parsePrimary(); }
+    string parseExpression() {
+    string type = parsePrimaryWithType();
+    
+    while (isOp(curr())) {
+        Token op = curr();
+        advance();
+        
+        // ERROR: Missing RHS operand
+        if (curr().type == TokenType::SEMICOLON || 
+            curr().type == TokenType::RPAREN || 
+            curr().type == TokenType::RBRACE ||
+            curr().type == TokenType::COMMA) {
+            string errMsg = "Line " + to_string(op.line) + ":" + to_string(op.column) + 
+                           " - Incomplete expression: missing operand after '" + op.value + "'";
+            string sug = "SUGGESTION: Complete the expression. Example: x + y";
+            errors.push_back({errMsg, sug});
+            return type;
+        }
+        
+        string rhsType = parsePrimaryWithType();
+        
+        // TYPE CHECKING
+        if (type != "UNKNOWN" && rhsType != "UNKNOWN") {
+            string resultType = TypeSystem::getOperationResultType(type, rhsType, op.value);
+            
+            if (resultType == "INVALID") {
+                string errMsg = "Line " + to_string(op.line) + ":" + to_string(op.column) + 
+                              " - Type error: cannot apply '" + op.value + "' to '" + type + 
+                              "' and '" + rhsType + "'";
+                string sug = "SUGGESTION: Ensure both operands are compatible types";
+                errors.push_back({errMsg, sug});
+            }
+            type = (resultType == "INVALID" || resultType == "UNKNOWN") ? type : resultType;
+        }
     }
+    return type;
+}
+
 
     void parsePrimary() {
-    if (curr().type == TokenType::TOK_IDENTIFIER) {
-        Token id = curr();
-        if (!sym.exists(id.value)) {
-            string errMsg = "Line " + to_string(id.line) + ":" + to_string(id.column) + 
-                           " - Undeclared variable '" + id.value + "'";
+    Token t = curr();
+    
+    if (t.type == TokenType::TOK_IDENTIFIER) {
+        // CHECK 1: Is this identifier declared or a standard library function?
+        if (!sym.exists(t.value)) {
+            string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                           " - Undeclared identifier '" + t.value + "'";
             string sug = suggestionEngine.getSuggestion(errMsg);
             errors.push_back({errMsg, sug});
         }
+        
         advance();
         
-        // ADD THIS: Handle function calls
+        // CHECK 2: If it's a function call, check all arguments
         if (curr().type == TokenType::LPAREN) {
             advance();  // skip (
+            
             if (curr().type != TokenType::RPAREN) {
-                // Parse arguments separated by commas
                 while (true) {
+                    // RECURSIVELY check arguments - will find undeclared vars in args
                     parseExpression();
+                    
                     if (curr().type == TokenType::COMMA) {
                         advance();
                     } else {
@@ -1050,28 +1150,224 @@ private:
             expect(TokenType::RPAREN, ")");
         }
     }
-    else if (curr().type == TokenType::TOK_NUMBER || 
-             curr().type == TokenType::TOK_STRING || 
-             curr().type == TokenType::TOK_CHAR) { 
-        advance(); 
+    // CHECK 3: Number literal - report if it's a bare statement like "2;"
+    else if (t.type == TokenType::TOK_NUMBER) {
+        // Numbers are OK in expressions, but bare "2;" is suspicious
+        // Let the caller decide if this is an error (bare statement)
+        advance();
     }
-    else if (curr().type == TokenType::LPAREN) { 
-        advance(); 
-        parseExpression(); 
-        expect(TokenType::RPAREN, ")"); 
+    // CHECK 4: String literal
+    else if (t.type == TokenType::TOK_STRING) {
+        advance();
     }
-    else if (curr().type != TokenType::SEMICOLON && 
-             curr().type != TokenType::RPAREN && 
-             curr().type != TokenType::RBRACE && 
-             curr().type != TokenType::COMMA && 
-             curr().type != TokenType::TOK_EOF) {
-        Token bad = curr();
-        string errMsg = "Line " + to_string(bad.line) + ":" + to_string(bad.column) + 
-                       " - Unexpected token '" + bad.value + "'";
+    // CHECK 5: Character literal
+    else if (t.type == TokenType::TOK_CHAR) {
+        advance();
+    }
+    // CHECK 6: Parenthesized expression
+    else if (t.type == TokenType::LPAREN) {
+        advance();
+        parseExpression();  // RECURSIVE - will check nested identifiers
+        expect(TokenType::RPAREN, ")");
+    }
+    // CHECK 7: Unary operators
+    else if (t.type == TokenType::OP_MINUS || t.type == TokenType::OP_PLUS || 
+             t.type == TokenType::OP_NOT || t.type == TokenType::OP_BITNOT) {
+        advance();
+        parsePrimary();  // Check the operand
+    }
+    // CHECK 8: Increment/Decrement
+    else if (t.type == TokenType::OP_INC || t.type == TokenType::OP_DEC) {
+        advance();
+        parsePrimary();
+    }
+    // ERROR: Unexpected token
+    else if (t.type != TokenType::SEMICOLON && 
+             t.type != TokenType::RPAREN && 
+             t.type != TokenType::RBRACE && 
+             t.type != TokenType::COMMA && 
+             t.type != TokenType::TOK_EOF) {
+        string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                       " - Unexpected token '" + t.value + "'";
         string sug = suggestionEngine.getSuggestion(errMsg);
         errors.push_back({errMsg, sug});
         advance();
     }
+}
+
+string parsePrimaryWithType() {
+    Token t = curr();
+    
+    if (t.type == TokenType::TOK_IDENTIFIER) {
+        string type = sym.getType(t.value);
+        Token idTok = curr();  // Save identifier token
+        
+        if (!sym.exists(t.value)) {
+            string errMsg = "Line " + to_string(t.line) + ":" + to_string(t.column) + 
+                           " - Undeclared identifier '" + t.value + "'";
+            string sug = suggestionEngine.getSuggestion(errMsg);
+            errors.push_back({errMsg, sug});
+        }
+        
+        advance();
+        
+        // Handle function calls
+        if (curr().type == TokenType::LPAREN) {
+            advance();
+            if (curr().type != TokenType::RPAREN) {
+                while (true) {
+                    parseExpression();
+                    if (curr().type == TokenType::COMMA) {
+                        advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            expect(TokenType::RPAREN, ")");
+            
+            // Check for postfix operators on function call (INVALID - function is not lvalue)
+            if (curr().type == TokenType::OP_INC || curr().type == TokenType::OP_DEC) {
+                Token opTok = curr();
+                string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                               " - Invalid: cannot apply '" + opTok.value + 
+                               "' to function call '" + idTok.value + "()' (not a modifiable lvalue)";
+                string sug = "SUGGESTION: ++/-- can only be used on variables, not function results";
+                errors.push_back({errMsg, sug});
+                advance();  // Skip the invalid operator
+            }
+            
+            return "int";  // Functions return int
+        }
+        // Handle postfix operators on variables (VALID if it's a modifiable lvalue)
+        else if (curr().type == TokenType::OP_INC || curr().type == TokenType::OP_DEC) {
+            if (!isModifiableLvalue(idTok, type)) {
+                Token opTok = curr();
+                string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                               " - Invalid: cannot apply '" + opTok.value + 
+                               "' to '" + idTok.value + "' (not a modifiable lvalue)";
+                string sug = "SUGGESTION: ++/-- require a modifiable variable";
+                errors.push_back({errMsg, sug});
+            }
+            advance();  // Valid or not, skip the operator
+        }
+        
+        return type;
+    }
+    else if (t.type == TokenType::TOK_NUMBER) {
+        advance();
+        if (t.value.find('.') != string::npos) {
+            return "float";
+        }
+        return "int";
+    }
+    else if (t.type == TokenType::TOK_STRING) {
+        advance();
+        return "string";
+    }
+    else if (t.type == TokenType::TOK_CHAR) {
+        advance();
+        return "char";
+    }
+    else if (t.type == TokenType::LPAREN) {
+        advance();
+        string type = parseExpression();
+        expect(TokenType::RPAREN, ")");
+        return type;
+    }
+    // PREFIX UNARY OPERATORS
+    else if (t.type == TokenType::OP_MINUS || t.type == TokenType::OP_PLUS || 
+             t.type == TokenType::OP_NOT || t.type == TokenType::OP_BITNOT ||
+             t.type == TokenType::OP_INC || t.type == TokenType::OP_DEC) {
+        
+        Token opTok = curr();
+        advance();
+        
+        // Check if operand follows
+        if (curr().type == TokenType::SEMICOLON ||
+            curr().type == TokenType::RPAREN ||
+            curr().type == TokenType::RBRACE ||
+            curr().type == TokenType::COMMA) {
+            string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                           " - Incomplete unary expression: missing operand after '" + opTok.value + "'";
+            string sug = "SUGGESTION: Provide an operand. Example: -x or ++y";
+            errors.push_back({errMsg, sug});
+            return "UNKNOWN";
+        }
+        
+        // For prefix ++ and --, the operand MUST be a modifiable lvalue
+        if (opTok.type == TokenType::OP_INC || opTok.type == TokenType::OP_DEC) {
+            // Peek ahead to see if it's an identifier
+            if (curr().type == TokenType::TOK_IDENTIFIER) {
+                Token nextId = curr();
+                string nextType = sym.getType(nextId.value);
+                
+                if (!isModifiableLvalue(nextId, nextType)) {
+                    string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                                   " - Invalid: cannot apply '" + opTok.value + 
+                                   "' to '" + nextId.value + "' (not a modifiable lvalue)";
+                    string sug = "SUGGESTION: ++/-- require a modifiable variable";
+                    errors.push_back({errMsg, sug});
+                }
+            } else if (curr().type == TokenType::TOK_NUMBER || 
+                       curr().type == TokenType::TOK_STRING ||
+                       curr().type == TokenType::TOK_CHAR) {
+                string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                               " - Invalid: cannot apply '" + opTok.value + 
+                               "' to a literal (not a modifiable lvalue)";
+                string sug = "SUGGESTION: ++/-- can only be used on variables";
+                errors.push_back({errMsg, sug});
+            }
+        }
+        
+        // Recursively parse the operand
+        return parsePrimaryWithType();
+    }
+    // BINARY OPERATORS (INVALID in primary position)
+    else if (t.type == TokenType::OP_EQ || t.type == TokenType::OP_NE ||
+             t.type == TokenType::OP_AND || t.type == TokenType::OP_OR) {
+        Token opTok = curr();
+        string errMsg = "Line " + to_string(opTok.line) + ":" + to_string(opTok.column) + 
+                       " - Invalid expression: binary operator '" + opTok.value + 
+                       "' cannot start here (missing left operand)";
+        string sug = "SUGGESTION: Add a left operand. Example: x " + opTok.value + " y";
+        errors.push_back({errMsg, sug});
+        advance();
+        if (curr().type != TokenType::SEMICOLON && curr().type != TokenType::TOK_EOF) {
+            return parsePrimaryWithType();
+        }
+        return "UNKNOWN";
+    }
+    
+    return "UNKNOWN";
+}
+
+
+bool isModifiableLvalue(const Token& token, const string& symType) {
+    // A modifiable lvalue must be:
+    // 1. An identifier (not a literal)
+    // 2. NOT a standard library function
+    // 3. NOT a function being called
+    // 4. A declared variable
+    
+    if (token.type != TokenType::TOK_IDENTIFIER) {
+        return false;  // Literals are not lvalues
+    }
+    
+    // Check if it's a standard library function
+    if (stdLib.isStdioFunction(token.value) ||
+        stdLib.isStdlibFunction(token.value) ||
+        stdLib.isStringFunction(token.value) ||
+        stdLib.isMathFunction(token.value)) {
+        return false;  // Standard library functions are not modifiable lvalues
+    }
+    
+    // Check if it's been declared as a variable
+    if (symType == "UNKNOWN" || symType == "function") {
+        return false;  // Not a declared variable
+    }
+    
+    return true;  // It's a variable - modifiable lvalue!
 }
 
 

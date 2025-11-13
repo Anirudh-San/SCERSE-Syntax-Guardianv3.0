@@ -58,6 +58,7 @@ enum class TokenType
     OP_PLUS,
     OP_MINUS,
     OP_MUL,
+    OP_STAR,
     OP_DIV,
     OP_MOD,
     OP_ASSIGN,

@@ -29,6 +29,7 @@ public:
     int getCurrentColumn() const;
     
     void highlightErrorLine(int lineNumber);
+    void highlightErrorColumn(int lineNumber, int startColumn, int endColumn);
     void clearErrorHighlighting();
 
 protected:

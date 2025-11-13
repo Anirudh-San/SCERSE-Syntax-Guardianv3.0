@@ -20,7 +20,7 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
              << "\\bfor\\b" << "\\breturn\\b" << "\\bstruct\\b" << "\\btypedef\\b"
              << "\\bconst\\b" << "\\bstatic\\b" << "\\bextern\\b" << "\\bsizeof\\b"
              << "\\bbreak\\b" << "\\bcontinue\\b" << "\\bswitch\\b" << "\\bcase\\b"
-             << "\\bdefault\\b" << "\\bunion\\b" << "\\benum\\b";
+             << "\\bdefault\\b" << "\\bunion\\b" << "\\benum\\b" << "\\bauto\\b";
     
     for (const QString &keyword : keywords) {
         rule.pattern = QRegularExpression(keyword);

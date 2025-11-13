@@ -175,6 +175,33 @@ void CodeEditor::highlightErrorLine(int lineNumber)
     centerCursor();
 }
 
+void CodeEditor::highlightErrorColumn(int lineNumber, int startColumn, int endColumn) {
+    QTextDocument *doc = document();
+    QTextBlock block = doc->findBlockByNumber(lineNumber - 1);
+    
+    if (!block.isValid()) return;
+    
+    QTextCursor cursor(block);
+    cursor.movePosition(QTextCursor::StartOfBlock);
+    cursor.movePosition(QTextCursor::Right, QTextCursor::MoveAnchor, startColumn - 1);
+    cursor.movePosition(QTextCursor::Right, QTextCursor::KeepAnchor, endColumn - startColumn + 1);
+    
+    QList<QTextEdit::ExtraSelection> extraSelections;
+    
+    // Error highlight for specific column range
+    QTextEdit::ExtraSelection errorSelection;
+    errorSelection.cursor = cursor;
+    errorSelection.format.setBackground(QBrush(QColor(200, 0, 0)));  // Red background
+    errorSelection.format.setForeground(QBrush(QColor(255, 255, 255)));  // White text
+    extraSelections.append(errorSelection);
+    
+    setExtraSelections(extraSelections);
+    
+    // Move to error position
+    setTextCursor(cursor);
+    centerCursor();
+}
+
 void CodeEditor::clearErrorHighlighting()
 {
     highlightCurrentLine();

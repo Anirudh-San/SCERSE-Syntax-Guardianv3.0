@@ -83,8 +83,8 @@ clean: CMakeFiles/SCERSE_autogen.dir/clean
 # Target rules for target CMakeFiles/SCERSE.dir
 
 # All Build rule for target.
-CMakeFiles/SCERSE.dir/all: CMakeFiles/SCERSE_autogen_timestamp_deps.dir/all
 CMakeFiles/SCERSE.dir/all: CMakeFiles/SCERSE_autogen.dir/all
+CMakeFiles/SCERSE.dir/all: CMakeFiles/SCERSE_autogen_timestamp_deps.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\SCERSE.dir\build.make CMakeFiles/SCERSE.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\SCERSE.dir\build.make CMakeFiles/SCERSE.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="D:\Ani\Projects\SCERSE - C Syntax Guardian\build\CMakeFiles" --progress-num=1,2,3,4,5,6,7 "Built target SCERSE"

@@ -87,6 +87,10 @@ namespace SCERSE
         if (codeEditor)
         {
             codeEditor->setPlainText(
+                "/*DISCLAIMER:\n"
+                "S.C.E.R.S.E. cannot detect preprocessor errors, only their base syntax is checked and are skipped from analysis\n"
+                "S.C.E.R.S.E. is assuming standard library usage (std::) and does not check for logical errors\n\n"
+                "Created by Anirudh Sanker - 2023UCP1844 */\n\n"
                 "#include <stdio.h>\n\n"
                 "int main() {\n"
                 "    int x = 10;\n"

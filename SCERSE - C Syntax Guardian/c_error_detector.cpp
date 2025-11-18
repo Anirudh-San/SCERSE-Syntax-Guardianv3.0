@@ -1,11 +1,3 @@
-/*
- * Modularized C Error Detector
- * - Supports stdio.h functions
- * - Handles #include statements
- * - Qt 6.9.3 compatible architecture
- * - Clean API for GUI integration
- */
-
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -15,22 +7,23 @@
 #include <cctype>
 #include <sstream>
 #include <set>
+#include <algorithm>
 
 using namespace std;
 
 // ============================================================================
-// FORWARD DECLARATIONS & TYPES
+// Structure of Analysis that is to be returned
 // ============================================================================
 
 struct AnalysisResult
 {
-    vector<string> lexicalErrors;
+    vector<string> lexicalErrors;              // store lexical errors
     vector<pair<string, string>> syntaxErrors; // (error, suggestion)
     int totalErrors;
 };
 
 // ============================================================================
-// ERROR SUGGESTION ENGINE MODULE
+// ERROR SUGGESTION ENGINE MODULE (Template of the Message)
 // ============================================================================
 
 struct ErrorSuggestion
@@ -50,13 +43,14 @@ private:
 public:
     SuggestionEngine()
     {
+        // Fill list with common C error patterns and suggestions and examples in the struct creator format
         suggestions.push_back(ErrorSuggestion(
             "Expected ';'",
             "Add a semicolon at the end of the statement",
             "int x = 5;  // <- Correct"));
         suggestions.push_back(ErrorSuggestion(
             "Expected '('",
-            "Control structures need parentheses around condition",
+            "Control structures like conditions, functions, loops etc. need parentheses around condition",
             "if (x > 5) { } while (y < 10) { }"));
         suggestions.push_back(ErrorSuggestion(
             "Expected ')'",
@@ -69,7 +63,7 @@ public:
         suggestions.push_back(ErrorSuggestion(
             "Undeclared variable",
             "Declare variable before using: type varname;",
-            "int x; x = 5;  // <- Declare BEFORE using"));
+            "int x;\nx = 5;  // <- Declare BEFORE using"));
         suggestions.push_back(ErrorSuggestion(
             "Redeclaration",
             "Variable already exists in this scope. Use different name",
@@ -77,19 +71,19 @@ public:
         suggestions.push_back(ErrorSuggestion(
             "Invalid numeric literal",
             "Check for multiple decimals or invalid characters",
-            "float x = 3.14;  // <- Correct"));
+            "float x = 3.14;  // <- Correct\nint y = 42.0.@;  // <- WRONG"));
         suggestions.push_back(ErrorSuggestion(
             "Unterminated string",
             "String literals must have opening AND closing quotes",
-            "char* s = \"hello\";  // <- Both sides have quotes"));
+            "char* s = \"hello\";  // <- Both sides have quotes \nchar* t = \"hello;  // <- WRONG"));
         suggestions.push_back(ErrorSuggestion(
             "Unterminated character",
             "Character literals must have opening AND closing quotes",
-            "char c = 'A';  // <- Both sides have quotes"));
+            "char c = 'A';  // <- Both sides have quotes \nchar d = 'B;  // <- WRONG"));
         suggestions.push_back(ErrorSuggestion(
             "Multi-character constant",
             "Character literals can only contain ONE character",
-            "char c = 'A';  // <- Correct"));
+            "char c = 'A';  // <- Correct \nchar d = 'AB';  // <- WRONG"));
         suggestions.push_back(ErrorSuggestion(
             "Invalid character",
             "Remove invalid characters. Common: @, #, $ in wrong context",
@@ -108,7 +102,7 @@ public:
             "#if defined(DEBUG)\\n// code\\n#endif  // <- Proper pairing"));
     }
 
-    string getSuggestion(const string &errorMsg)
+    string getSuggestion(const string &errorMsg) // return suggestion based on error message
     {
         for (const auto &s : suggestions)
         {
@@ -120,7 +114,7 @@ public:
         return "";
     }
 
-    void addCustomSuggestion(const string &e, const string &s, const string &ex)
+    void addCustomSuggestion(const string &e, const string &s, const string &ex) // add new suggestion later in code directly
     {
         suggestions.push_back(ErrorSuggestion(e, s, ex));
     }
@@ -130,6 +124,7 @@ public:
 // STANDARD LIBRARY MODULE (stdio, stdlib, etc.)
 // ============================================================================
 
+// so that include statements and built-in functions can be recognized
 class StandardLibrary
 {
 private:
@@ -163,8 +158,16 @@ public:
             "sin", "cos", "tan", "sqrt", "pow", "abs", "floor", "ceil"};
 
         // Function signatures for type checking
+
+        // variadic
         functionSignatures["printf"] = "int printf(const char* format, ...)";
         functionSignatures["scanf"] = "int scanf(const char* format, ...)";
+        functionSignatures["fprintf"] = "int fprintf(FILE* stream, const char* format, ...)";
+        functionSignatures["sprintf"] = "int sprintf(char* str, const char* format, ...)";
+        functionSignatures["sscanf"] = "int sscanf(const char* buffer, const char* format, ...)";
+        functionSignatures["fscanf"] = "int fscanf(FILE* stream, const char* format, ...)";
+
+        // non-variadic
         functionSignatures["malloc"] = "void* malloc(size_t size)";
         functionSignatures["free"] = "void free(void* ptr)";
         functionSignatures["strlen"] = "size_t strlen(const char* s)";
@@ -203,7 +206,7 @@ public:
         if (line.find("#include") != 0)
             return;
 
-        size_t start = line.find_first_of("<\"");
+        size_t start = line.find_first_of("<\""); // UPDATE
         size_t end = line.find_last_of(">\"");
 
         if (start == string::npos || end == string::npos || start >= end)
@@ -268,8 +271,8 @@ enum class TokenType
     KW_CONST,
     KW_STATIC,
     KW_EXTERN,
-    KW_STRUCT, // ADD: struct keyword
-    KW_AUTO,   // ADD: auto keyword
+    KW_STRUCT,
+    KW_AUTO,
     OP_PLUS,
     OP_MINUS,
     OP_STAR,
@@ -289,6 +292,9 @@ enum class TokenType
     OP_DEC,
     OP_PLUSEQ,
     OP_MINUSEQ,
+    OP_MULTEQ,
+    OP_DIVEQ,
+    OP_MODEQ,
     OP_BITAND,
     OP_BITOR,
     OP_BITXOR,
@@ -313,7 +319,7 @@ enum class TokenType
 struct Token
 {
     TokenType type;
-    string value;
+    string value; // which token it is as read from source
     int line;
     int column;
     Token(TokenType t = TokenType::TOK_UNKNOWN, string v = "", int l = 1, int c = 1)
@@ -361,7 +367,7 @@ private:
     char currentChar() { return pos >= input.length() ? '\0' : input[pos]; }
     char peekChar(int offset = 1) { return pos + offset >= input.length() ? '\0' : input[pos + offset]; }
 
-    void advance()
+    void advance() // move to next character
     {
         if (pos < input.length())
         {
@@ -712,13 +718,31 @@ public:
             return Token(TokenType::OP_MINUS, "-", sL, sC);
         case '*':
             advance();
+            if (currentChar() == '=')
+            {
+                advance();
+                return Token(TokenType::OP_MULTEQ, "*=", sL, sC);
+            }
             return Token(TokenType::OP_STAR, "*", sL, sC);
+
         case '/':
             advance();
+            if (currentChar() == '=')
+            {
+                advance();
+                return Token(TokenType::OP_DIVEQ, "/=", sL, sC);
+            }
             return Token(TokenType::OP_SLASH, "/", sL, sC);
+
         case '%':
             advance();
+            if (currentChar() == '=')
+            {
+                advance();
+                return Token(TokenType::OP_MODEQ, "%=", sL, sC);
+            }
             return Token(TokenType::OP_PERCENT, "%", sL, sC);
+
         case '=':
             advance();
             if (currentChar() == '=')
@@ -780,7 +804,7 @@ public:
         }
     }
 
-    vector<string> getErrors() const { return errors; }
+    vector<string> getErrors() const { return errors; } // stored in a list for recovery and showing all errors at once
 
     vector<Token> tokenizeAll()
     {
@@ -853,27 +877,22 @@ public:
 
     static bool areTypesCompatible(const string &lhs, const string &rhs)
     {
-        // ===============================
-        // EXACT MATCH
-        // ===============================
+        // Same to same type
+
         if (lhs == rhs)
             return true;
 
-        // ===============================
         // VOID TYPE RULES
-        // ===============================
         if (isVoid(lhs) || isVoid(rhs))
             return false; // void cannot be assigned or stored
 
-        // ===============================
         // NULL → pointer allowed
-        // ===============================
+
         if (isPointer(lhs) && rhs == "0")
             return true;
 
-        // ===============================
         // POINTERS
-        // ===============================
+
         if (isPointer(lhs) || isPointer(rhs))
         {
             // pointer = pointer
@@ -898,24 +917,20 @@ public:
             return false;
         }
 
-        // ===============================
         // STRUCTS
-        // ===============================
+
         if (isStruct(lhs) || isStruct(rhs))
             return lhs == rhs; // structs are compatible only if same type
 
-        // ===============================
         // STRING TYPE (C string literal)
-        // ===============================
+
         if (isString(lhs) || isString(rhs))
         {
             // only string = string allowed
             return lhs == rhs;
         }
 
-        // ===============================
         // CHAR TYPE RULES
-        // ===============================
         if (isChar(lhs))
         {
             // char = char OK
@@ -947,9 +962,8 @@ public:
             return false;
         }
 
-        // ===============================
         // INTEGER TYPE RULES
-        // ===============================
+
         if (isInteger(lhs) && isInteger(rhs))
             return true; // safe
 
@@ -961,9 +975,8 @@ public:
         if (isFloat(lhs) && isInteger(rhs))
             return true;
 
-        // ===============================
         // FLOAT TYPE RULES
-        // ===============================
+
         if (isFloat(lhs) && isFloat(rhs))
             return true;
 
@@ -971,11 +984,8 @@ public:
         if (isFloat(lhs) && isChar(rhs))
             return true;
 
-        // char = float → disallowed (already covered)
-
-        // ===============================
         // FALLBACK: INCOMPATIBLE
-        // ===============================
+
         return false;
     }
 
@@ -1005,11 +1015,15 @@ public:
         }
 
         // Comparison operations return int (bool)
-        if (op == "==" || op == "!=" || op == "<" || op == ">" ||
-            op == "<=" || op == ">=")
+        // --- Comparison operators (==, !=, <, <=, >, >=) ---
+        if (op == "==" || op == "!=" ||
+            op == "<" || op == "<=" ||
+            op == ">" || op == ">=")
         {
-            if (areTypesCompatible(lhs, rhs))
-                return "int";
+            // Both sides must be numeric — but types may differ
+            if ((isNumericType(lhs) && isNumericType(rhs)))
+                return "int"; // Comparisons result in int (true/false)
+
             return "INVALID";
         }
 
@@ -1050,18 +1064,20 @@ class SymbolTable
     StandardLibrary stdLib;
 
 public:
-    SymbolTable() { pushScope(); }
-    void pushScope() { scopes.push_back({}); }
+    SymbolTable() { pushScope(); } // for each new block a scope is created, at start by default there is a global scope
+
+    void pushScope() { scopes.push_back({}); } // new scope for new block
+
     void popScope()
     {
         if (!scopes.empty())
-            scopes.pop_back();
+            scopes.pop_back(); // exits block scope
     }
 
     bool declare(const string &n, const string &t, int line = 0, int col = 0)
     {
-        auto &c = scopes.back();
-        if (c.count(n))
+        auto &c = scopes.back(); // current scope
+        if (c.count(n))          // duplicate declaration in same scope
             return false;
         c[n] = VarInfo(n, t, line, col);
         return true;
@@ -1113,12 +1129,12 @@ class Parser
 {
 private:
     vector<Token> tokens;
-    size_t index;
+    size_t index; // current token index
     SymbolTable sym;
     vector<pair<string, string>> errors;
     SuggestionEngine suggestionEngine;
     StandardLibrary stdLib;
-    size_t lastIndex;
+    size_t lastIndex; // for backtracking
     TypeSystem typeChecker;
     int scopeDepth = 0; // Track current scope depth
 
@@ -1167,7 +1183,7 @@ private:
             t.type == TokenType::KW_AUTO)
             return true;
 
-        // NEW: typedef names act like types
+        // makes typedef names act like types
         if (t.type == TokenType::TOK_IDENTIFIER)
         {
             string ty = sym.getType(t.value);
@@ -1210,11 +1226,22 @@ private:
                type == TokenType::OP_BITAND || type == TokenType::OP_BITOR ||
                type == TokenType::OP_BITXOR;
     }
-    // Helper: Get expression type and detect type errors
+
+    string parsePointerStars()
+    {
+        string ptr = "";
+        while (curr().type == TokenType::OP_STAR)
+        {
+            ptr += "*";
+            advance();
+        }
+        return ptr;
+    }
+
     string getExpressionType(const Token &t)
     {
         if (t.type == TokenType::TOK_NUMBER)
-            return "int"; // Could be float if has .
+            return "int";
         if (t.type == TokenType::TOK_STRING)
             return "string";
         if (t.type == TokenType::TOK_CHAR)
@@ -1285,12 +1312,8 @@ private:
             typeName = "struct " + tag;
         }
 
-        // function vs variable follows the *real* identifier
-        while (curr().type == TokenType::OP_STAR)
-        {
-            typeName += "*";
-            advance();
-        }
+        // handle pointer tokens after type (int **p)
+        typeName += parsePointerStars();
 
         if (curr().type != TokenType::TOK_IDENTIFIER)
         {
@@ -1316,16 +1339,12 @@ private:
         string declaredType = type; // Already includes pointers from parseStatement
 
         // Handle leading pointer tokens before variable name (int *p)
-        while (curr().type == TokenType::OP_STAR)
-        {
-            declaredType += "*";
-            advance();
-        }
+        declaredType += parsePointerStars();
 
         bool isArray = false;
         string arraySize = "";
 
-        // Check for array declarator: int arr[10]
+        // Check for array declarator
         if (curr().type == TokenType::LBRACKET)
         {
             isArray = true;
@@ -1380,6 +1399,7 @@ private:
                     errors.push_back({errMsg, sug});
                 }
             }
+
             else
             {
                 string rhsType = parseExpressionWithFullType();
@@ -1401,12 +1421,9 @@ private:
             advance();
 
             // collect any pointer stars BEFORE the next identifier
-            string nextDeclaredType = type; // base type, e.g., "int"
-            while (curr().type == TokenType::OP_STAR)
-            {
-                nextDeclaredType += "*";
-                advance();
-            }
+            string nextDeclaredType = type; // base type for next variable eg: int a, b;
+
+            nextDeclaredType += parsePointerStars();
 
             if (curr().type != TokenType::TOK_IDENTIFIER)
             {
@@ -1471,11 +1488,12 @@ private:
             {
                 advance();
             }
+
             else if (curr().type == TokenType::LBRACE)
             {
                 int braceCount = 1;
                 advance();
-                while (braceCount > 0 && curr().type != TokenType::TOK_EOF)
+                while (braceCount > 0 && curr().type != TokenType::TOK_EOF) // to skip the block entirely
                 {
                     if (curr().type == TokenType::LBRACE)
                         braceCount++;
@@ -1519,11 +1537,7 @@ private:
                 string pType = curr().value;
                 advance();
 
-                while (curr().type == TokenType::OP_STAR)
-                {
-                    pType += "*";
-                    advance();
-                }
+                pType += parsePointerStars();
 
                 if (curr().type != TokenType::TOK_IDENTIFIER)
                 {
@@ -1574,6 +1588,7 @@ private:
                 parseStatement();
             forceAdvance();
         }
+
         if (iter >= maxIter)
         {
             Token bad = curr();
@@ -1582,7 +1597,8 @@ private:
         }
         expect(TokenType::RBRACE, "}");
     }
-    // NEW: factor typedef into a reusable routine
+
+    // factor typedef into a reusable routine
     void parseTypedef()
     {
         advance(); // consumed KW_TYPEDEF
@@ -1609,11 +1625,7 @@ private:
             }
         }
 
-        while (curr().type == TokenType::OP_STAR)
-        {
-            baseType += "*";
-            advance();
-        }
+        baseType += parsePointerStars();
 
         if (curr().type != TokenType::TOK_IDENTIFIER)
         {
@@ -1632,7 +1644,7 @@ private:
         sym.declare(newTypeName, "typedef:" + baseType);
     }
 
-    // NEW: factor struct into a reusable routine
+    // factor struct into a reusable routine
     void parseStruct()
     {
         advance(); // consumed KW_STRUCT
@@ -1659,11 +1671,9 @@ private:
                 {
                     string memberType = curr().value;
                     advance();
-                    while (curr().type == TokenType::OP_STAR)
-                    {
-                        memberType += "*";
-                        advance();
-                    }
+
+                    memberType += parsePointerStars();
+
                     if (curr().type == TokenType::TOK_IDENTIFIER)
                     {
                         advance();
@@ -1699,11 +1709,9 @@ private:
             {
                 // allow pointer before name: struct N {..} *p;
                 string varType = "struct " + structName;
-                while (curr().type == TokenType::OP_STAR)
-                {
-                    varType += "*";
-                    advance();
-                }
+
+                varType += parsePointerStars();
+
                 Token nameTok = curr();
                 if (nameTok.type == TokenType::TOK_IDENTIFIER)
                 {
@@ -1734,11 +1742,9 @@ private:
         {
             // allow pointer stars before identifier: struct Point *p;
             string varType = "struct " + structName;
-            while (curr().type == TokenType::OP_STAR)
-            {
-                varType += "*";
-                advance();
-            }
+
+            varType += parsePointerStars();
+
             if (curr().type == TokenType::TOK_IDENTIFIER)
             {
                 Token nameTok = curr();
@@ -1896,11 +1902,7 @@ private:
             advance();
 
             // Handle pointers: const int *p;
-            while (curr().type == TokenType::OP_STAR)
-            {
-                type += "*";
-                advance();
-            }
+            type += parsePointerStars();
 
             if (curr().type != TokenType::TOK_IDENTIFIER)
             {
@@ -1975,11 +1977,7 @@ private:
             }
 
             // Handle pointers: int *p;
-            while (curr().type == TokenType::OP_STAR)
-            {
-                type += "*";
-                advance();
-            }
+            type += parsePointerStars();
 
             if (curr().type != TokenType::TOK_IDENTIFIER)
             {
@@ -2024,39 +2022,45 @@ private:
             st.type == TokenType::OP_INC ||
             st.type == TokenType::OP_DEC;
 
-        // Extra rule: *, /, % cannot start a statement in C
-        if (st.type == TokenType::OP_STAR ||
-            st.type == TokenType::OP_SLASH ||
-            st.type == TokenType::OP_PERCENT)
+        if (!isValidStart)
         {
-            string errMsg =
+            string err =
                 "Line " + to_string(st.line) + ":" + to_string(st.column) +
                 " - Invalid statement start: '" + st.value + "'";
-            errors.push_back({errMsg, "SUGGESTION: Statements cannot begin with '" + st.value + "'"});
+            errors.push_back({err, "SUGGESTION: Statements must begin with an expression, literal, or identifier"});
             advance();
             return;
         }
 
-        // ADD THIS: forbid starting with unary operators if the next token is a FUNCTION name
+        // Extra rule: *, /, % cannot start a statement
+        if (st.type == TokenType::OP_STAR ||
+            st.type == TokenType::OP_SLASH ||
+            st.type == TokenType::OP_PERCENT)
+        {
+            string err =
+                "Line " + to_string(st.line) + ":" + to_string(st.column) +
+                " - Invalid statement start: '" + st.value + "'";
+            errors.push_back({err, "SUGGESTION: Statements cannot begin with '" + st.value + "'"});
+            advance();
+            return;
+        }
+
+        // Unary op cannot apply to function name
         if (st.type == TokenType::OP_MINUS ||
             st.type == TokenType::OP_PLUS ||
             st.type == TokenType::OP_NOT ||
             st.type == TokenType::OP_BITNOT)
         {
             Token nxt = peek();
-
-            if (nxt.type == TokenType::TOK_IDENTIFIER)
+            if (nxt.type == TokenType::TOK_IDENTIFIER &&
+                sym.getType(nxt.value) == "function")
             {
-                string nxtType = sym.getType(nxt.value);
-
-                if (nxtType == "function")
-                {
-                    errors.push_back({"Line " + to_string(st.line) + ":" + to_string(st.column) +
-                                          " - Invalid unary operator '" + st.value + "' applied to function '" + nxt.value + "'",
-                                      "SUGGESTION: Unary operators only apply to numeric expressions"});
-                    advance();
-                    return;
-                }
+                string err =
+                    "Line " + to_string(st.line) + ":" + to_string(st.column) +
+                    " - Invalid unary operator '" + st.value + "' applied to function '" + nxt.value + "'";
+                errors.push_back({err, "SUGGESTION: Unary operators only apply to numeric expressions"});
+                advance();
+                return;
             }
         }
 
@@ -2067,41 +2071,93 @@ private:
 
     void parseExprOrAssignment()
     {
-        if (curr().type == TokenType::TOK_IDENTIFIER && peek().type == TokenType::OP_ASSIGN)
-        {
-            Token id = curr();
-            string varType = sym.getType(id.value);
+        Token t = curr();
 
-            // CHECK: LHS variable must be declared
-            if (!sym.exists(id.value))
+        // ============================================
+        // 1) COMPOUND ASSIGNMENTS (+= -= *= /= %=)
+        // MUST COME BEFORE NORMAL EXPRESSION PARSING
+        // ============================================
+        if (t.type == TokenType::TOK_IDENTIFIER &&
+            (peek().type == TokenType::OP_PLUSEQ ||
+             peek().type == TokenType::OP_MINUSEQ ||
+             peek().type == TokenType::OP_MULTEQ ||
+             peek().type == TokenType::OP_DIVEQ ||
+             peek().type == TokenType::OP_MODEQ))
+        {
+            Token idTok = curr();
+            string lhsType = sym.getType(idTok.value);
+
+            if (!sym.exists(idTok.value))
             {
-                string errMsg = "Line " + to_string(id.line) + ":" + to_string(id.column) +
-                                " - Undeclared variable '" + id.value + "'";
-                string sug = suggestionEngine.getSuggestion(errMsg);
-                errors.push_back({errMsg, sug});
+                string err = "Line " + to_string(idTok.line) + ":" +
+                             to_string(idTok.column) +
+                             " - Undeclared variable '" + idTok.value + "'";
+                errors.push_back({err, suggestionEngine.getSuggestion(err)});
             }
 
-            advance();
-            Token assignTok = curr();
-            advance();
+            advance(); // consume identifier
+            Token opTok = curr();
+            advance(); // consume the +=, -=, etc
 
-            // Parse RHS - this will check y and all identifiers in expression
             string rhsType = parseExpressionWithFullType();
 
-            // TYPE CHECK on assignment to existing variable
-            if (varType != "UNKNOWN" && rhsType != "UNKNOWN" &&
-                !TypeSystem::areTypesCompatible(varType, rhsType))
+            // TYPE CHECK
+            if (lhsType != "UNKNOWN" &&
+                rhsType != "UNKNOWN" &&
+                !TypeSystem::areTypesCompatible(lhsType, rhsType))
             {
-                string errMsg = "Warning: Line " + to_string(assignTok.line) + ":" + to_string(assignTok.column) +
-                                " - Type error: assigning '" + rhsType + "' to '" + varType + "'";
-                string sug = "SUGGESTION: Types must match. " + varType + " expected, " + rhsType + " provided";
-                errors.push_back({errMsg, sug});
+                string err =
+                    "Warning: Line " + to_string(opTok.line) + ":" +
+                    to_string(opTok.column) +
+                    " - Type mismatch in compound assignment '" + opTok.value + "'";
+                errors.push_back({err, "SUGGESTION: Use matching arithmetic types"});
             }
+
+            return; // handled
         }
-        else
+
+        // ============================================
+        // 2) SIMPLE ASSIGNMENT (=)
+        // ============================================
+        if (t.type == TokenType::TOK_IDENTIFIER &&
+            peek().type == TokenType::OP_ASSIGN)
         {
-            parseExpression();
+            Token idTok = curr();
+            string lhsType = sym.getType(idTok.value);
+
+            if (!sym.exists(idTok.value))
+            {
+                string err = "Line " + to_string(idTok.line) + ":" +
+                             to_string(idTok.column) +
+                             " - Undeclared variable '" + idTok.value + "'";
+                errors.push_back({err, suggestionEngine.getSuggestion(err)});
+            }
+
+            advance(); // consume identifier
+            Token assignTok = curr();
+            advance(); // consume '='
+
+            string rhsType = parseExpressionWithFullType();
+
+            if (lhsType != "UNKNOWN" &&
+                rhsType != "UNKNOWN" &&
+                !TypeSystem::areTypesCompatible(lhsType, rhsType))
+            {
+                string err =
+                    "Warning: Line " + to_string(assignTok.line) + ":" +
+                    to_string(assignTok.column) +
+                    " - Type mismatch: assigning '" + rhsType +
+                    "' to '" + lhsType + "'";
+                errors.push_back({err, "SUGGESTION: Use compatible types"});
+            }
+
+            return;
         }
+
+        // ============================================
+        // 3) FALLBACK → normal expression
+        // ============================================
+        parseExpression();
     }
 
     string parseExpression()
@@ -2113,14 +2169,16 @@ private:
             // ===============================
             // INVALID OPERATOR SEQUENCE CHECK
             // ===============================
-            if ((curr().type == TokenType::OP_ASSIGN || curr().type == TokenType::OP_EQ) &&
-                (peek().type == TokenType::OP_EQ))
+            if (((curr().type == TokenType::OP_NOT || curr().type == TokenType::OP_ASSIGN || peek().type == TokenType::OP_EQ) &&
+                 (curr().type == TokenType::OP_ASSIGN || peek().type == TokenType::OP_EQ)) ||
+                ((curr().type == TokenType::OP_EQ) &&
+                 (peek().type == TokenType::OP_LE || peek().type == TokenType::OP_GE || peek().type == TokenType::OP_LT || peek().type == TokenType::OP_GT)))
             {
                 // This is the pattern: ! = =  (user typed !==)
                 Token bad = curr();
                 string err = "Line " + to_string(bad.line) + ":" + to_string(bad.column) +
-                             " - Invalid operator sequence: '!==' is not valid in C";
-                errors.push_back({err, "SUGGESTION: Use '!=' for inequality"});
+                             " - Invalid operator sequence:  sequences like '!==' or '===' are not valid in C";
+                errors.push_back({err, "SUGGESTION: Use '!=' for inequality or '==' for equality"});
 
                 // Skip the extra =
                 advance();
@@ -2304,7 +2362,7 @@ private:
                 expect(TokenType::RPAREN, ")");
 
                 // ------------------------------------
-                // ARGUMENT COUNT CHECK (NEW)
+                // ARGUMENT COUNT CHECK (UPDATED)
                 // ------------------------------------
                 string signature = stdLib.getFunctionSignature(idTok.value);
 
@@ -2317,16 +2375,52 @@ private:
                     {
                         string params = signature.substr(pos1 + 1, pos2 - pos1 - 1);
 
-                        // Validate fixed-arity functions
-                        if (params != "..." && params != "void" && !params.empty())
+                        // A) VARIADIC FUNCTIONS
+                        if (params.find("...") != string::npos)
                         {
-                            int expected = count(params.begin(), params.end(), ',') + 1;
+                            // Everything before the "..."
+                            string required = params.substr(0, params.find("..."));
+
+                            // Split required parameters by comma
+                            int requiredCount = 0;
+                            string token;
+                            stringstream ss(required);
+
+                            while (getline(ss, token, ','))
+                            {
+                                // Trim whitespace
+                                token.erase(0, token.find_first_not_of(" \t"));
+                                token.erase(token.find_last_not_of(" \t") + 1);
+
+                                if (!token.empty()) // only count real parameters
+                                    requiredCount++;
+                            }
+
+                            int provided = argTypes.size();
+
+                            if (provided < requiredCount)
+                            {
+                                errors.push_back({"Line " + to_string(idTok.line) + ":" + to_string(idTok.column) +
+                                                      " - Function '" + idTok.value +
+                                                      "' requires at least " + to_string(requiredCount) + " argument(s)",
+                                                  "SUGGESTION: Provide enough parameters before the variadic '...'"});
+                            }
+
+                            return "int"; // No further checks for variadic
+                        }
+
+                        // ------------------------------------------------------------
+                        // B) FIXED-ARITY FUNCTIONS
+                        // ------------------------------------------------------------
+                        if (params != "void" && !params.empty())
+                        {
+                            int expected = std::count(params.begin(), params.end(), ',') + 1;
                             int provided = argTypes.size();
 
                             if (expected != provided)
                             {
                                 errors.push_back({"Line " + to_string(idTok.line) + ":" + to_string(idTok.column) +
-                                                      " - Function call argument count mismatch for '" + idTok.value + "'",
+                                                      " - Function call argument mismatch for '" + idTok.value + "'",
                                                   "SUGGESTION: Expected " + to_string(expected) +
                                                       " argument(s), but got " + to_string(provided)});
                             }
@@ -2581,14 +2675,16 @@ private:
             // ===============================
             // INVALID OPERATOR SEQUENCE CHECK
             // ===============================
-            if ((curr().type == TokenType::OP_ASSIGN || curr().type == TokenType::OP_EQ) &&
-                (peek().type == TokenType::OP_EQ))
+            if (((curr().type == TokenType::OP_NOT || curr().type == TokenType::OP_ASSIGN || peek().type == TokenType::OP_EQ) &&
+                 (curr().type == TokenType::OP_ASSIGN || peek().type == TokenType::OP_EQ)) ||
+                ((curr().type == TokenType::OP_EQ) &&
+                 (peek().type == TokenType::OP_LE || peek().type == TokenType::OP_GE || peek().type == TokenType::OP_LT || peek().type == TokenType::OP_GT)))
             {
                 // This is the pattern: ! = =  (user typed !==)
                 Token bad = curr();
                 string err = "Line " + to_string(bad.line) + ":" + to_string(bad.column) +
-                             " - Invalid operator sequence: '!==' is not valid in C";
-                errors.push_back({err, "SUGGESTION: Use '!=' for inequality"});
+                             " - Invalid operator sequence:  sequences like '!==' or '===' are not valid in C";
+                errors.push_back({err, "SUGGESTION: Use '!=' for inequality or '==' for equality"});
 
                 // Skip the extra =
                 advance();
@@ -2682,6 +2778,7 @@ private:
 
 public:
     CErrorDetectorEngine() : lexer(nullptr), parser(nullptr) {}
+
     ~CErrorDetectorEngine()
     {
         if (lexer)
